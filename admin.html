@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Mine Runner Admin</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0a0a0a; color: #fff; font-family: monospace; padding: 16px; }
+h1 { color: #FFD700; font-size: 16px; margin-bottom: 20px; text-align: center; }
+.card { background: #1a1a1a; border: 1px solid #333; padding: 16px; margin-bottom: 16px; }
+.card h2 { color: #FFD700; font-size: 12px; margin-bottom: 12px; }
+input { width: 100%; background: #000; border: 1px solid #FFD700; color: #fff; padding: 14px; font-size: 16px; margin-bottom: 12px; display: block; }
+button { width: 100%; background: #FFD700; color: #000; border: none; padding: 14px; font-size: 14px; font-weight: bold; cursor: pointer; margin-bottom: 8px; display: block; }
+button.green { background: #2ecc71; }
+.stat { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #222; font-size: 13px; }
+.stat span:last-child { color: #FFD700; font-weight: bold; }
+.player { background: #111; border: 1px solid #222; padding: 12px; margin-bottom: 8px; }
+.player .name { color: #fff; font-size: 13px; font-weight: bold; }
+.player .details { color: #888; font-size: 11px; margin-top: 4px; }
+.player .wallet { color: #4a9eff; font-size: 10px; margin-top: 4px; word-break: break-all; }
+.badge { display: inline-block; padding: 2px 6px; font-size: 10px; margin-left: 6px; }
+.bw { background: rgba(74,158,255,0.2); color: #4a9eff; border: 1px solid #4a9eff; }
+.bnw { background: rgba(255,68,68,0.2); color: #f44; border: 1px solid #f44; }
+.err { color: #f44; font-size: 12px; margin-top: 8px; }
+.calc-row { display: flex; gap: 8px; }
+.calc-row input { flex: 1; }
+.rbox { background: #000; border: 1px solid #FFD700; padding: 12px; text-align: center; margin-top: 8px; }
+.rbox div { font-size: 11px; color: #888; margin-bottom: 4px; }
+.rbox span { color: #FFD700; font-size: 16px; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<div id="login">
+  <h1>⛏ MINE RUNNER ADMIN</h1>
+  <div class="card">
+    <h2>LOGIN</h2>
+    <input type="password" id="ki" placeholder="Admin key..." />
+    <button onclick="doLogin()">ACCESS PANEL</button>
+    <div class="err" id="err"></div>
+  </div>
+</div>
+
+<div id="panel" style="display:none">
+  <h1>⛏ ADMIN PANEL</h1>
+  <div class="card">
+    <h2>📊 STATS</h2>
+    <div class="stat"><span>Total Players</span><span id="st">-</span></div>
+    <div class="stat"><span>Wallets</span><span id="sw">-</span></div>
+    <div class="stat"><span>Eligible</span><span id="se">-</span></div>
+    <div class="stat"><span>Total Points</span><span id="sp">-</span></div>
+  </div>
+  <div class="card">
+    <h2>🪂 AIRDROP CALC</h2>
+    <div class="calc-row">
+      <input type="number" id="cs" value="100000000" oninput="calc()" />
+      <input type="number" id="cp" value="20" oninput="calc()" />
+    </div>
+    <input type="text" id="csym" value="MNR" oninput="calc()" />
+    <div class="rbox">
+      <div>Per Point</div><span id="cpp">-</span>
+      <div style="margin-top:8px">Pool</div><span id="cpool">-</span>
+    </div>
+  </div>
+  <div class="card">
+    <h2>⚡ ACTIONS</h2>
+    <button class="green" onclick="loadData()">↻ REFRESH</button>
+    <button onclick="exportCSV()">📥 EXPORT CSV</button>
+  </div>
+  <div class="card">
+    <h2>🏆 PLAYERS</h2>
+    <input type="text" id="srch" placeholder="Search..." oninput="doSearch(this.value)" />
+    <div id="pl">Loading...</div>
+  </div>
+</div>
+
+<script>
+var W='https://mine-runner-backend.vinodkumarpursh.workers.dev';
+var K='minerunner_admin_2024';
+var users=[];
+
+function doLogin(){
+  var k=document.getElementById('ki').value.trim();
+  if(k===K){
+    document.getElementById('login').style.display='none';
+    document.getElementById('panel').style.display='block';
+    loadData();
+  } else {
+    document.getElementById('err').textContent='Wrong key!';
+  }
+}
+
+document.getElementById('ki').addEventListener('keyup',function(e){ if(e.key==='Enter') doLogin(); });
+
+async function loadData(){
+  document.getElementById('pl').innerHTML='Loading...';
+  try{
+    var r=await fetch(W+'/admin/users?key='+K);
+    var d=await r.json();
+    if(!d.ok){ document.getElementById('pl').innerHTML='<div class="err">Error: '+(d.error||'?')+'</div>'; return; }
+    users=d.users||[];
+    renderStats(); renderPlayers(users); calc();
+  }catch(e){ document.getElementById('pl').innerHTML='<div class="err">'+e.message+'</div>'; }
+}
+
+function renderStats(){
+  document.getElementById('st').textContent=users.length;
+  document.getElementById('sw').textContent=users.filter(function(u){return u.wallet;}).length;
+  document.getElementById('se').textContent=users.filter(function(u){return u.wallet&&u.score>0;}).length;
+  document.getElementById('sp').textContent=users.reduce(function(s,u){return s+(u.score||0);},0).toLocaleString();
+}
+
+function calc(){
+  var supply=parseInt(document.getElementById('cs').value)||0;
+  var pct=parseFloat(document.getElementById('cp').value)||0;
+  var sym=document.getElementById('csym').value||'TOKEN';
+  var pool=Math.floor(supply*pct/100);
+  var total=users.reduce(function(s,u){return s+(u.score||0);},0);
+  var perPt=total>0?(pool/total).toFixed(4):'0';
+  document.getElementById('cpool').textContent=pool.toLocaleString()+' '+sym;
+  document.getElementById('cpp').textContent=perPt+' '+sym;
+}
+
+function renderPlayers(list){
+  if(!list.length){ document.getElementById('pl').innerHTML='<div style="color:#888;text-align:center;padding:20px;font-size:12px;">No players</div>'; return; }
+  var supply=parseInt(document.getElementById('cs').value)||100000000;
+  var pct=parseFloat(document.getElementById('cp').value)||20;
+  var sym=document.getElementById('csym').value||'MNR';
+  var pool=Math.floor(supply*pct/100);
+  var total=users.reduce(function(s,u){return s+(u.score||0);},0);
+  var perPt=total>0?pool/total:0;
+  var html='';
+  list.forEach(function(u,i){
+    var rank=i+1;
+    var icon=rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':'#'+rank;
+    var tokens=Math.floor((u.score||0)*perPt*(u.wallet?1.5:1.0));
+    var sw=u.wallet?u.wallet.slice(0,10)+'...'+u.wallet.slice(-6):null;
+    html+='<div class="player"><div class="name">'+icon+' '+(u.username||'Player')+(u.wallet?'<span class="badge bw">WALLET</span>':'<span class="badge bnw">NO WALLET</span>')+'</div><div class="details">Score: '+(u.score||0).toLocaleString()+' | Est: '+tokens.toLocaleString()+' '+sym+' | Commission: '+(u.totalCommission||0)+'</div>'+(sw?'<div class="wallet">'+sw+'</div>':'')+'</div>';
+  });
+  document.getElementById('pl').innerHTML=html;
+}
+
+function doSearch(q){
+  var f=users.filter(function(u){return (u.username||'').toLowerCase().indexOf(q.toLowerCase())>=0||(u.userId||'').indexOf(q)>=0;});
+  renderPlayers(f);
+}
+
+function exportCSV(){
+  if(!users.length){ alert('No data!'); return; }
+  var sym=document.getElementById('csym').value||'MNR';
+  var supply=parseInt(document.getElementById('cs').value)||100000000;
+  var pct=parseFloat(document.getElementById('cp').value)||20;
+  var pool=Math.floor(supply*pct/100);
+  var total=users.reduce(function(s,u){return s+(u.score||0);},0);
+  var perPt=total>0?pool/total:0;
+  var csv='Rank,Username,UserID,Score,Wallet,Tokens,Commission\n';
+  users.forEach(function(u,i){
+    var tokens=Math.floor((u.score||0)*perPt*(u.wallet?1.5:1.0));
+    csv+=(i+1)+',"'+(u.username||'Player')+'",'+(u.userId||'')+','+(u.score||0)+','+(u.wallet||'')+','+tokens+','+(u.totalCommission||0)+'\n';
+  });
+  var a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='mine-runner-'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+}
+</script>
+</body>
+</html>
