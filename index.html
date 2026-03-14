@@ -185,8 +185,16 @@ var W=1,H=1,GY=1;
 function resize(){W=window.innerWidth;H=window.innerHeight-46;C.width=W;C.height=H;C.style.width=W+'px';C.style.height=H+'px';GY=H-Math.round(H*0.22);}
 
 // SAVE
-function loadSave(){try{return JSON.parse(localStorage.getItem('mcr3')||'{}');}catch(e){return{};}}
-function writeSave(d){try{localStorage.setItem('mcr3',JSON.stringify(d));}catch(e){}}
+// Per-user save key based on Telegram user ID
+function getSaveKey(){
+  try{
+    var tg=window.Telegram&&window.Telegram.WebApp;
+    var uid=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.id;
+    return uid ? 'mcr3_'+uid : 'mcr3';
+  }catch(e){return 'mcr3';}
+}
+function loadSave(){try{return JSON.parse(localStorage.getItem(getSaveKey())||'{}');}catch(e){return{};}}
+function writeSave(d){try{localStorage.setItem(getSaveKey(),JSON.stringify(d));}catch(e){}}
 var sv=loadSave(),COINS=sv.coins||0,OWNED=new Set(sv.owned||[]),EQUIPPED=new Set(sv.equipped||[]),BEST=sv.best||0,MAX_EQ=3;
 function doSave(){writeSave({coins:COINS,owned:[...OWNED],equipped:[...EQUIPPED],best:BEST});}
 
@@ -899,7 +907,17 @@ document.getElementById('C').addEventListener('touchstart',function(e){e.prevent
 window.addEventListener('resize',function(){resize();if(STATE!=='playing'){genTerrain();resetPlayer();}});
 
 // BOOT
-function boot(){resize();DIM='overworld';DC=DIMS.overworld;initWorld();resetPlayer();checkReferral();document.getElementById('H_COINS').innerHTML='&#x1FA99;'+COINS;document.getElementById('H_S').textContent=0;document.getElementById('H_B').textContent=BEST;idleLoop();}
+function boot(){
+  // Reload save with correct user key now that Telegram SDK is ready
+  var sv2=loadSave();
+  COINS=sv2.coins||COINS||0;
+  OWNED=new Set(sv2.owned||[...OWNED]);
+  EQUIPPED=new Set(sv2.equipped||[...EQUIPPED]);
+  BEST=sv2.best||BEST||0;
+  PERKS_OWNED=JSON.parse(localStorage.getItem(getSaveKey()+'_perks')||'[]');
+  document.getElementById('H_COINS').innerHTML='&#x1FA99;'+COINS;
+  document.getElementById('H_B').textContent=BEST;
+  resize();DIM='overworld';DC=DIMS.overworld;initWorld();resetPlayer();checkReferral();document.getElementById('H_COINS').innerHTML='&#x1FA99;'+COINS;document.getElementById('H_S').textContent=0;document.getElementById('H_B').textContent=BEST;idleLoop();}
 window.onload=boot;
 
 // =============================================
@@ -1178,7 +1196,7 @@ function give2xCoins(){
 // ═══════════════════════════════════════════
 var WORKER_URL = 'https://mine-runner-backend.vinodkumarpursh.workers.dev';
 var STARS_TAB = 'coins';
-var PERKS_OWNED = JSON.parse(localStorage.getItem('mcr3_perks') || '[]');
+var PERKS_OWNED = JSON.parse(localStorage.getItem((getSaveKey||function(){return 'mcr3';})()+'_perks') || '[]');
 
 var COIN_PACKAGES = [
   { id:'test',    label:'TEST Pack',      coins:10,   bonus:0,   stars:1,   icon:'🧪', badge:'TEST' },
@@ -1196,7 +1214,7 @@ var PERKS = [
   { id:'vip',       name:'VIP Badge',     desc:'Golden name in leaderboard',            stars:200, icon:'⭐' },
 ];
 
-function savePerks(){ localStorage.setItem('mcr3_perks', JSON.stringify(PERKS_OWNED)); }
+function savePerks(){ localStorage.setItem(getSaveKey()+'_perks', JSON.stringify(PERKS_OWNED)); }
 
 function openStarsShop(){
   document.getElementById('ST_COINS').textContent = COINS;
